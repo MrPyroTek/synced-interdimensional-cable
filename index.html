@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' https: 'unsafe-inline' 'unsafe-eval' blob: data:">
+    <title>YouTube Playlist Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #player {
+            width: 100%;
+            height: 100vh;
+        }
+
+        .options-panel {
+            display: none;
+            position: fixed;
+            top: 0px;
+            left: 60px;
+            width: 50%;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            z-index: 1500;
+            transition: opacity 0.3s ease-in-out;
+            opacity: 1;
+        }
+
+        .toggle-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            cursor: pointer;
+            z-index: 1001;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .controls button {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .controls button:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        #indexInput {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 5px;
+            width: 60px;
+            margin: 5px;
+        }
+
+        .current-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 1.2em;
+        }
+
+        #channelSelect {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+            width: calc(100% - 10px);
+        }
+
+        #channelSelect option {
+            background-color: #000;
+            color: white;
+        }
+
+        #channelSelect:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .channel-button {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 20px 15px;
+            cursor: pointer;
+            z-index: 1001;
+            border-radius: 4px;
+        }
+
+        .channel-button:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .channel-button.left {
+            left: 20px;
+        }
+
+        .channel-button.right {
+            right: 20px;
+        }
+
+        #gridView {
+            display: none;
+            width: 100%;
+            height: 100vh;
+            overflow-y: auto;
+            background: #000;
+            padding: 20px;
+        }
+
+        .thumbnail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            padding: 15px;
+        }
+
+        .thumbnail-item {
+            position: relative;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s;
+            aspect-ratio: 16/9;
+        }
+
+        .thumbnail-item:hover {
+            transform: scale(1.05);
+            z-index: 1;
+        }
+
+        .thumbnail-item img {
+            width: 100%;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+        }
+
+        .thumbnail-info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            max-height: 100%;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .thumbnail-item:hover .thumbnail-info {
+            opacity: 1;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .pagination button {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .pagination button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loadingOverlay">
+        <div class="loading-text">Loading YouTube Player...</div>
+    </div>
+    <div id="unmuteOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1500; cursor: pointer;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center;">
+            <h2>Click anywhere to unmute</h2>
+            <p>Browser policy requires user interaction to enable sound</p>
+        </div>
+    </div>
+    <div id="player"></div>
+    <div id="gridView">
+        <div class="thumbnail-grid" id="thumbnailGrid"></div>
+        <div class="pagination" id="gridPagination"></div>
+    </div>
+    <button class="toggle-button" style="right: 10px; top: 70px;" onclick="goToChannel0()">Mosaïque</button>
+    <div class="options-panel" id="optionsPanel">
+        <div class="controls">
+            <select id="channelSelect" onchange="changeChannel()">
+                <option value="1">Channel 1</option>
+                <option value="2">Channel 2</option>
+                <option value="3">Channel 3</option>
+                <option value="4">Channel 4</option>
+                <option value="5">Channel 5</option>
+            </select>
+        </div>
+        <div class="current-info" id="currentInfo">
+            Loading video list...
+        </div>
+    </div>
+    <button class="channel-button left" onclick="changeChannelBy(-1)">◀</button>
+    <button class="channel-button right" onclick="changeChannelBy(1)">▶</button>
+    <div id="channelNotification" style="display: none; position: fixed; top: 0px; left: 50px; width: 50%; background-color: rgba(0, 0, 0, 1); padding: 20px; border-radius: 8px; z-index: 1500; transition: opacity 0.3s ease-in-out; opacity: 1 !important;">
+        <h2 id="channelTitle" style="margin-bottom: 10px; font-size: 24px;">Channel 1</h2>
+        <p id="channelVideoTitle" style="color: #ccc; font-size: 16px;">Video Title</p>
+    </div>
+
+    <script>
+        const JSON_FILE_PATH = 'list1.json';  // Path to your JSON file
+        let player;
+        let videoList = [];
+        let videoSequence = [];
+        let cumulativeTime = []; // To keep track of the cumulative time for each video
+        let currentIndex = 0;
+        let isChangingVideo = false;
+        let currentChannel = 1; // Default channel
+        let lastGeneratedSeed = '';
+        let currentPage = 1;
+        const itemsPerPage = 24;
+        let gridVideos = [];
+        let notificationTimeout;
+
+        // Load YouTube IFrame API
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(tag);
+
+        // Convert video duration (e.g., "0:46") into seconds
+        function parseDuration(duration) {
+            const parts = duration.split(':');
+            let seconds = 0;
+            if (parts.length === 2) {
+                seconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+            } else {
+                seconds = parseInt(parts[0]);
+            }
+            return seconds;
+        }
+
+        // Hash function to convert a string to a number
+        function stringToHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = (hash << 5) - hash + char;
+                hash |= 0; // Convert to 32-bit integer
+            }
+            return Math.abs(hash);
+        }
+
+        // Seeded PRNG based on the hashed seed value
+        function seededRandom(seed) {
+            const hash = stringToHash(seed); // Convert seed to a number
+            const x = Math.sin(hash) * 10000;
+            return x - Math.floor(x); // Ensure a value between 0 and 1
+        }
+
+        // Fetch the JSON list from file
+        async function fetchVideoList() {
+            try {
+                const response = await fetch(JSON_FILE_PATH);
+                const data = await response.json();
+                videoList = data;
+                console.log(`Total videos fetched: ${videoList.length}`);
+
+                // Generate seed based on current date and 10-minute block
+                const seed = generateSeed();
+                videoSequence = generateVideoSequence(seed); // Generate the sequence for the 10-minute block
+                calculateCumulativeTime(); // Calculate the cumulative time for each video
+                updateCurrentInfo();
+
+                console.log("Video Sequence for the 10-Minute Block:", videoSequence);
+            } catch (error) {
+                console.error('Error fetching video list:', error);
+            }
+        }
+
+        // Generate the video sequence for the 10-minute block
+        function generateVideoSequence(seed) {
+            const sequence = [];
+            // Select videos using the seed
+            for (let minute = 0; minute < 6; minute++) {
+                const blockSeed = seed + '-' + minute;
+                const randomIndex = Math.floor(seededRandom(blockSeed) * videoList.length);
+                sequence.push(videoList[randomIndex]);
+            }
+            return sequence;
+        }
+
+        // Generate a seed based on the current date and 10-minute block
+        function generateSeed() {
+            const now = new Date();
+            const franceTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
+            const minutes = franceTime.getMinutes();
+            const blockStart = Math.floor(minutes / 10) * 10;
+            const seed = `${franceTime.getFullYear()}-${franceTime.getMonth() + 1}-${franceTime.getDate()}-${blockStart}-ch${currentChannel}`;
+            return seed;
+        }
+
+        // Calculate cumulative time for each video
+        function calculateCumulativeTime() {
+            cumulativeTime = [];
+            let totalTime = 0;
+            for (let i = 0; i < videoSequence.length; i++) {
+                const duration = parseDuration(videoSequence[i].duration);
+                totalTime += duration;
+                cumulativeTime.push(totalTime); // Store cumulative time for each video
+            }
+        }
+
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                height: '100%',
+                width: '100%',
+                playerVars: {
+                    'autoplay': 1,
+                    'controls': 1,
+                    'rel': 0,
+                    'showinfo': 1,
+                    'modestbranding': 1,
+                    'fs': 1,
+                    'enablejsapi': 1,
+                    'mute': 1,  // Start muted
+                    'playsinline': 1  // Better mobile support
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        async function onPlayerReady(event) {
+            console.log('Player ready');
+            document.getElementById('loadingOverlay').style.display = 'none';
+            
+            // Load saved channel or default to 1
+            const savedChannel = localStorage.getItem('selectedChannel');
+            if (savedChannel) {
+                currentChannel = parseInt(savedChannel);  // Make sure it's a number
+                const select = document.getElementById('channelSelect');
+                
+                // Add the channel option if it doesn't exist
+                if (!select.querySelector(`option[value="${currentChannel}"]`)) {
+                    const option = document.createElement('option');
+                    option.value = currentChannel;
+                    option.text = `Channel ${currentChannel}`;
+                    select.add(option);
+                }
+                
+                select.value = currentChannel;
+            }
+            
+            await fetchVideoList();
+            playVideoForCurrentBlock();
+            showUnmutePrompt();
+        }
+
+        function onPlayerStateChange(event) {
+            if (isChangingVideo) return;
+
+            if (event.data === YT.PlayerState.ENDED) {
+                currentIndex++;
+                if (currentIndex >= videoSequence.length) {
+                    window.location.reload();
+                } else {
+                    const nextVideo = videoSequence[currentIndex];
+                    playVideoById(nextVideo.id, 0);
+                }
+            }
+        }
+
+        function playVideoById(videoId, startTime) {
+            isChangingVideo = true;
+            const wasMuted = player.isMuted();  // Check if player was muted
+            player.loadVideoById({
+                videoId: videoId,
+                startSeconds: startTime,
+                suggestedQuality: 'hd720'
+            });
+            updateCurrentInfo();
+            if (wasMuted) {
+                player.mute();  // Maintain mute state if it was muted
+            }
+            player.playVideo();
+            setTimeout(() => { isChangingVideo = false; }, 1000);
+        }
+
+        // Play the video corresponding to the current 10-minute block
+        function playVideoForCurrentBlock() {
+            const now = new Date();
+            const currentMinute = now.getMinutes();
+            const currentSeconds = now.getSeconds();
+            const blockStart = Math.floor(currentMinute / 10) * 10;
+            const totalSeconds = (currentMinute - blockStart) * 60 + currentSeconds;
+
+            console.log('Minutes into block:', currentMinute - blockStart);
+            console.log('Seconds into block:', totalSeconds);
+            console.log('Current channel:', currentChannel);  // Debug log
+
+            // Use the existing videoSequence if it exists and matches current block
+            // otherwise generate new sequence
+            const currentSeed = generateSeed();
+            if (!videoSequence.length || currentSeed !== lastGeneratedSeed) {
+                videoSequence = generateVideoSequence(currentSeed);
+                lastGeneratedSeed = currentSeed;
+                calculateCumulativeTime();
+            }
+
+            // Find the current video and start time
+            let currentVideoIndex = 0;
+            for (let i = 0; i < cumulativeTime.length; i++) {
+                if (totalSeconds < cumulativeTime[i]) {
+                    currentVideoIndex = i;
+                    break;
+                }
+            }
+
+            const startTime = totalSeconds - (currentVideoIndex > 0 ? cumulativeTime[currentVideoIndex - 1] : 0);
+            const currentVideo = videoSequence[currentVideoIndex];
+
+            if (currentVideo) {
+                console.log(`Playing video ${currentVideoIndex + 1} at ${startTime} seconds`);
+                playVideoById(currentVideo.id, startTime);
+                currentIndex = currentVideoIndex; // Update the current index for the info panel
+            } else {
+                console.error('No video found for current time');
+            }
+        }
+
+        // Helper to update current video info
+        function updateCurrentInfo() {
+            const currentVideo = videoSequence[currentIndex];
+            document.getElementById('currentInfo').innerText = 
+                `Channel ${currentChannel} - Current Video: ${currentVideo ? currentVideo.title : 'Loading...'}`;
+        }
+
+        function showUnmutePrompt() {
+            const overlay = document.getElementById('unmuteOverlay');
+            overlay.style.display = 'block';
+            
+            const handleUnmute = () => {
+                player.unMute();
+                player.playVideo();
+                overlay.style.display = 'none';
+                overlay.removeEventListener('click', handleUnmute);
+            };
+            
+            overlay.addEventListener('click', handleUnmute);
+        }
+
+        // Modify the changeChannel function
+        function changeChannel() {
+            const select = document.getElementById('channelSelect');
+            currentChannel = parseInt(select.value);
+            
+            localStorage.setItem('selectedChannel', currentChannel);
+            
+            lastGeneratedSeed = '';
+            playVideoForCurrentBlock();
+            updateCurrentInfo();
+            
+            // Show notification with current video title
+            const currentVideo = videoSequence[currentIndex];
+            showChannelNotification(currentChannel, currentVideo.title);
+        }
+
+        // Update the togglePanel function
+        function togglePanel() {
+            const panel = document.getElementById('optionsPanel');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                panel.style.opacity = '1';
+            } else {
+                panel.style.opacity = '0';
+                setTimeout(() => {
+                    panel.style.display = 'none';
+                }, 300); // Wait for fade out animation
+            }
+        }
+
+        // Modify the changeChannelBy function
+        function changeChannelBy(delta) {
+            const select = document.getElementById('channelSelect');
+            const currentValue = parseInt(select.value);
+            let newValue;
+            
+            if (delta > 0) {
+                newValue = currentValue + 1;
+                if (newValue > 999) newValue = 0; // Changed to include 0
+            } else {
+                newValue = currentValue - 1;
+                if (newValue < 0) newValue = 999;
+            }
+            
+            currentChannel = newValue;
+            
+            if (!select.querySelector(`option[value="${newValue}"]`)) {
+                const option = document.createElement('option');
+                option.value = newValue;
+                option.text = `Channel ${newValue}`;
+                select.add(option);
+            }
+            select.value = newValue;
+            
+            localStorage.setItem('selectedChannel', currentChannel);
+            
+            lastGeneratedSeed = '';
+            playVideoForCurrentBlock();
+            updateCurrentInfo();
+            
+            const currentVideo = videoSequence[currentIndex];
+            showChannelNotification(currentChannel, currentVideo.title);
+        }
+
+        function showChannelNotification(channelNumber, videoTitle) {
+            const notification = document.getElementById('channelNotification');
+            const titleElement = document.getElementById('channelTitle');
+            const videoTitleElement = document.getElementById('channelVideoTitle');
+            
+            // Clear any existing timeouts
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+            
+            // Update content
+            titleElement.textContent = `Channel ${channelNumber}`;
+            videoTitleElement.textContent = videoTitle;
+            
+            // Force full opacity before showing
+            notification.style.opacity = '1';
+            notification.style.display = 'block';
+            
+            // Keep full opacity for 1 second, then start fade out
+            notificationTimeout = setTimeout(() => {
+                notification.style.opacity = '1';
+                
+                // Start fade out after 1 more second
+                setTimeout(() => {
+                    notification.style.opacity = '0';
+                    setTimeout(() => {
+                        notification.style.display = 'none';
+                    }, 300);
+                }, 1000);
+            }, 1000);
+        }
+
+        function goToChannel0() {
+            currentChannel = 0;
+            const select = document.getElementById('channelSelect');
+            
+            if (!select.querySelector('option[value="0"]')) {
+                const option = document.createElement('option');
+                option.value = "0";
+                option.text = "Mosaïque";  // Updated text here
+                select.add(option, 0);
+            }
+            
+            select.value = "0";
+            localStorage.setItem('selectedChannel', currentChannel);
+            
+            loadGridView();
+        }
+
+        async function loadGridView() {
+            const playerView = document.getElementById('player');
+            const gridView = document.getElementById('gridView');
+            playerView.style.display = 'none';
+            gridView.style.display = 'block';
+            
+            // Reset to first page when opening grid view
+            currentPage = 1;
+            
+            // Generate current videos for multiple channels
+            gridVideos = [];
+            const now = new Date();
+            const currentMinute = now.getMinutes();
+            const blockStart = Math.floor(currentMinute / 10) * 10;
+            const totalSeconds = (currentMinute - blockStart) * 60 + now.getSeconds();
+
+            // Generate sequences for channels 1-999
+            for (let channel = 1; channel <= 999; channel++) {
+                const channelSeed = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${blockStart}-ch${channel}`;
+                const sequence = generateVideoSequence(channelSeed);
+                
+                // Calculate which video should be playing now
+                let currentVideoIndex = 0;
+                let cumulativeSeconds = 0;
+                
+                for (let i = 0; i < sequence.length; i++) {
+                    cumulativeSeconds += parseDuration(sequence[i].duration);
+                    if (totalSeconds < cumulativeSeconds) {
+                        currentVideoIndex = i;
+                        break;
+                    }
+                }
+
+                // Add only the current video from this channel
+                gridVideos.push({
+                    ...sequence[currentVideoIndex],
+                    channel: channel
+                });
+            }
+            
+            displayCurrentPage();
+        }
+
+        function displayCurrentPage() {
+            const grid = document.getElementById('thumbnailGrid');
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageVideos = gridVideos.slice(start, end);
+            
+            grid.innerHTML = pageVideos.map(video => `
+                <div class="thumbnail-item" onclick="playFromGrid('${video.id}', ${video.channel})">
+                    <img src="https://img.youtube.com/vi/${video.id}/mqdefault.jpg" alt="${video.title}">
+                    <div class="thumbnail-info">
+                        <div style="font-size: 1.2em; margin-bottom: 4px;">Channel ${video.channel}</div>
+                        <div style="font-size: 0.9em; opacity: 0.8;">${video.title}</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const pagination = document.getElementById('gridPagination');
+            const totalPages = Math.ceil(gridVideos.length / itemsPerPage);
+            
+            pagination.innerHTML = `
+                <button onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>
+                <span>Page ${currentPage} of ${totalPages}</span>
+                <button onclick="changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+            `;
+        }
+
+        function changePage(delta) {
+            const totalPages = Math.ceil(gridVideos.length / itemsPerPage);
+            currentPage = Math.max(1, Math.min(currentPage + delta, totalPages));
+            displayCurrentPage();
+        }
+
+        function playFromGrid(videoId, channel) {
+            currentChannel = channel;
+            const select = document.getElementById('channelSelect');
+            
+            // Add channel option if it doesn't exist
+            if (!select.querySelector(`option[value="${channel}"]`)) {
+                const option = document.createElement('option');
+                option.value = channel;
+                option.text = `Channel ${channel}`;
+                select.add(option);
+            }
+            
+            select.value = channel;
+            localStorage.setItem('selectedChannel', channel);
+            
+            // Switch back to player view
+            const playerView = document.getElementById('player');
+            const gridView = document.getElementById('gridView');
+            playerView.style.display = 'block';
+            gridView.style.display = 'none';
+            
+            // Play the selected video
+            playVideoById(videoId, 0);
+            lastGeneratedSeed = '';
+            playVideoForCurrentBlock();
+        }
+
+    </script>
+</body>
+
+</html>
