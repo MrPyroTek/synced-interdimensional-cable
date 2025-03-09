@@ -155,18 +155,29 @@
 
         #gridView {
             display: none;
-            width: 100%;
+            width: 100vw;
             height: 100vh;
-            overflow-y: auto;
+            overflow-y: scroll;
             background: #000;
             padding: 20px;
+            position: relative;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        #gridView::-webkit-scrollbar {
+            display: none;
         }
 
         .thumbnail-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 15px;
-            padding: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            width: 100%;
+            max-width: 100%;
+            padding-bottom: 80px;
         }
 
         .thumbnail-item {
@@ -177,6 +188,8 @@
             cursor: pointer;
             transition: transform 0.2s;
             aspect-ratio: 16/9;
+            width: 100%;
+            height: auto;
         }
 
         .thumbnail-item:hover {
@@ -209,23 +222,72 @@
         }
 
         .pagination {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
             display: flex;
             justify-content: center;
-            gap: 10px;
-            padding: 20px;
+            align-items: center;
+            gap: 5px;
+            padding: 15px;
+            flex-wrap: wrap;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
         }
 
         .pagination button {
             background: rgba(255, 255, 255, 0.2);
             border: none;
             color: white;
-            padding: 8px 15px;
+            padding: 8px 12px;
             cursor: pointer;
             border-radius: 4px;
+            min-width: 40px;
+            transition: background-color 0.2s;
         }
 
         .pagination button:hover {
             background: rgba(255, 255, 255, 0.3);
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination span {
+            color: white;
+            padding: 0 5px;
+        }
+
+        @media (max-width: 768px) {
+            .pagination button {
+                padding: 6px 10px;
+                min-width: 35px;
+                font-size: 14px;
+            }
+        }
+
+        @media screen and (min-width: 1920px) {
+            .thumbnail-grid {
+                grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+                gap: 25px;
+            }
+        }
+
+        @media screen and (max-width: 1280px) {
+            .thumbnail-grid {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 15px;
+            }
+        }
+
+        @media screen and (max-width: 768px) {
+            .thumbnail-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 10px;
+            }
         }
     </style>
 </head>
@@ -278,9 +340,10 @@
         let currentChannel = 1; // Default channel
         let lastGeneratedSeed = '';
         let currentPage = 1;
-        const itemsPerPage = 24;
+        let itemsPerPage = 24;
         let gridVideos = [];
         let notificationTimeout;
+        let mosaicRefreshInterval;
 
         // Load YouTube IFrame API
         const tag = document.createElement('script');
@@ -354,7 +417,7 @@
             const now = new Date();
             const franceTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
             const minutes = franceTime.getMinutes();
-            const blockStart = Math.floor(minutes / 10) * 10;
+            const blockStart = Math.floor(minutes / 10) * 10; // This already rounds down to nearest 10
             const seed = `${franceTime.getFullYear()}-${franceTime.getMonth() + 1}-${franceTime.getDate()}-${blockStart}-ch${currentChannel}`;
             return seed;
         }
@@ -607,33 +670,92 @@
             }, 1000);
         }
 
-        function goToChannel0() {
-            currentChannel = 0;
-            const select = document.getElementById('channelSelect');
+        function closeMosaic() {
+            const playerView = document.getElementById('player');
+            const gridView = document.getElementById('gridView');
+            playerView.style.display = 'block';
+            gridView.style.display = 'none';
             
-            if (!select.querySelector('option[value="0"]')) {
-                const option = document.createElement('option');
-                option.value = "0";
-                option.text = "Mosaïque";  // Updated text here
-                select.add(option, 0);
+            // Resume playing the current channel
+            playVideoForCurrentBlock();
+        }
+
+        // Modify goToChannel0 to toggle the mosaic view
+        function goToChannel0() {
+            const gridView = document.getElementById('gridView');
+            
+            // If mosaic is already visible, close it
+            if (gridView.style.display === 'block') {
+                closeMosaic();
+                return;
             }
             
-            select.value = "0";
-            localStorage.setItem('selectedChannel', currentChannel);
-            
+            // Open mosaic without changing channel
             loadGridView();
         }
 
+        // Modify startMosaicRefresh function
+        function startMosaicRefresh() {
+            // Clear any existing interval
+            if (mosaicRefreshInterval) {
+                clearInterval(mosaicRefreshInterval);
+            }
+            
+            // Set new interval
+            mosaicRefreshInterval = setInterval(() => {
+                if (document.getElementById('gridView').style.display === 'block') {  // Only refresh if mosaic is visible
+                    updateMosaicContent();
+                }
+            }, 5000); // 5 seconds
+        }
+
+        // Add new function to update mosaic content
+        async function updateMosaicContent() {
+            const now = new Date();
+            const currentMinute = now.getMinutes();
+            const blockStart = Math.floor(currentMinute / 10) * 10;
+            const totalSeconds = (currentMinute - blockStart) * 60 + now.getSeconds();
+
+            // Update current videos for all channels
+            for (let i = 0; i < gridVideos.length; i++) {
+                const channel = i + 1;
+                const channelSeed = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${blockStart}-ch${channel}`;
+                const sequence = generateVideoSequence(channelSeed);
+                
+                // Calculate which video should be playing now
+                let currentVideoIndex = 0;
+                let cumulativeSeconds = 0;
+                
+                for (let j = 0; j < sequence.length; j++) {
+                    cumulativeSeconds += parseDuration(sequence[j].duration);
+                    if (totalSeconds < cumulativeSeconds) {
+                        currentVideoIndex = j;
+                        break;
+                    }
+                }
+
+                // Update the video in gridVideos
+                gridVideos[i] = {
+                    ...sequence[currentVideoIndex],
+                    channel: channel
+                };
+            }
+            
+            // Refresh current page without changing page number
+            displayCurrentPage();
+        }
+
+        // Modify loadGridView to use the new refresh system
         async function loadGridView() {
             const playerView = document.getElementById('player');
             const gridView = document.getElementById('gridView');
             playerView.style.display = 'none';
             gridView.style.display = 'block';
             
-            // Reset to first page when opening grid view
-            currentPage = 1;
+            // Update itemsPerPage based on screen size
+            itemsPerPage = calculateItemsPerPage();
             
-            // Generate current videos for multiple channels
+            // Initialize gridVideos array
             gridVideos = [];
             const now = new Date();
             const currentMinute = now.getMinutes();
@@ -664,7 +786,14 @@
                 });
             }
             
+            // Calculate which page contains the current channel
+            const channelIndex = currentChannel - 1;
+            currentPage = Math.floor(channelIndex / itemsPerPage) + 1;
+            
             displayCurrentPage();
+            
+            // Start the refresh interval
+            startMosaicRefresh();
         }
 
         function displayCurrentPage() {
@@ -689,21 +818,65 @@
         function updatePagination() {
             const pagination = document.getElementById('gridPagination');
             const totalPages = Math.ceil(gridVideos.length / itemsPerPage);
+            const maxVisiblePages = Math.min(
+                Math.floor(window.innerWidth / 100), // Approximate width needed for each button
+                7 // Maximum number of visible page buttons
+            );
             
-            pagination.innerHTML = `
-                <button onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>
-                <span>Page ${currentPage} of ${totalPages}</span>
-                <button onclick="changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            // Adjust startPage if we're near the end
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+            
+            let paginationHTML = `
+                <button onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>◀</button>
             `;
+            
+            if (startPage > 1) {
+                paginationHTML += `
+                    <button onclick="goToPage(1)">1</button>
+                    ${startPage > 2 ? '<span>...</span>' : ''}
+                `;
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `
+                    <button onclick="goToPage(${i})" 
+                            ${i === currentPage ? 'style="background: rgba(255, 255, 255, 0.4);"' : ''}>
+                        ${i}
+                    </button>
+                `;
+            }
+            
+            if (endPage < totalPages) {
+                paginationHTML += `
+                    ${endPage < totalPages - 1 ? '<span>...</span>' : ''}
+                    <button onclick="goToPage(${totalPages})">${totalPages}</button>
+                `;
+            }
+            
+            paginationHTML += `
+                <button onclick="changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>▶</button>
+            `;
+            
+            pagination.innerHTML = paginationHTML;
         }
 
-        function changePage(delta) {
-            const totalPages = Math.ceil(gridVideos.length / itemsPerPage);
-            currentPage = Math.max(1, Math.min(currentPage + delta, totalPages));
+        function goToPage(page) {
+            currentPage = page;
             displayCurrentPage();
         }
 
         function playFromGrid(videoId, channel) {
+            // Stop the refresh interval
+            if (mosaicRefreshInterval) {
+                clearInterval(mosaicRefreshInterval);
+            }
+            
+            // Update channel
             currentChannel = channel;
             const select = document.getElementById('channelSelect');
             
@@ -715,6 +888,7 @@
                 select.add(option);
             }
             
+            // Update select and localStorage
             select.value = channel;
             localStorage.setItem('selectedChannel', channel);
             
@@ -724,11 +898,64 @@
             playerView.style.display = 'block';
             gridView.style.display = 'none';
             
-            // Play the selected video
-            playVideoById(videoId, 0);
+            // Force new sequence generation for the selected channel
             lastGeneratedSeed = '';
+            videoSequence = generateVideoSequence(generateSeed());
+            calculateCumulativeTime();
+            
+            // Play the current video for this channel
             playVideoForCurrentBlock();
+            
+            // Show notification
+            const currentVideo = videoSequence[currentIndex];
+            if (currentVideo) {
+                showChannelNotification(channel, currentVideo.title);
+            }
         }
+
+        // Update the itemsPerPage calculation based on screen size
+        function calculateItemsPerPage() {
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight - 100; // Account for pagination and margins
+            
+            // Calculate approximate number of columns and rows that can fit
+            const thumbnailWidth = viewportWidth >= 1920 ? 400 : 
+                                  viewportWidth >= 1280 ? 300 : 
+                                  viewportWidth >= 768 ? 250 : 200;
+            
+            const thumbnailHeight = thumbnailWidth * (9/16); // maintain 16:9 aspect ratio
+            const gap = viewportWidth >= 1920 ? 25 : 
+                        viewportWidth >= 1280 ? 20 : 
+                        viewportWidth >= 768 ? 15 : 10;
+            
+            const columns = Math.floor((viewportWidth - 40) / (thumbnailWidth + gap)); // Account for padding
+            const rows = Math.floor((viewportHeight - 40) / (thumbnailHeight + gap)); // Account for padding
+            
+            return columns * rows;
+        }
+
+        // Add window resize handler
+        window.addEventListener('resize', () => {
+            if (currentChannel === 0) { // Only recalculate if in grid view
+                itemsPerPage = calculateItemsPerPage();
+                displayCurrentPage();
+            }
+        });
+
+        // Add this function before updatePagination
+        function changePage(delta) {
+            const totalPages = Math.ceil(gridVideos.length / itemsPerPage);
+            const newPage = Math.max(1, Math.min(currentPage + delta, totalPages));
+            if (newPage !== currentPage) {
+                currentPage = newPage;
+                displayCurrentPage();
+            }
+        }
+
+        // Add cleanup when leaving the page
+        window.addEventListener('beforeunload', () => {
+            stopMosaicRefresh();
+        });
 
     </script>
 </body>
