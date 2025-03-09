@@ -1,5 +1,7 @@
 # Interdimensional cable : Synced TV YouTube Player
 
+https://mrpyrotek.github.io/synced-interdimensional-cable/
+
 This web-based app allows users to watch YouTube videos across multiple channels, all synced to a 10-minute block schedule. The app uses the YouTube IFrame API to load and control videos and generates a video sequence based on a "seed" derived from the current date and time.
 
 The app offers two main views: a dynamic player view where videos play in sequence and a grid view where users can browse video thumbnails from multiple channels.
