@@ -579,6 +579,12 @@ function playFromGrid(videoId, channel) {
     playerView.style.display = 'block';
     gridView.style.display = 'none';
     
+    // Show the channel icon and update channel number
+    const channelIcon = document.getElementById('channelIcon');
+    const channelNumberElement = channelIcon.querySelector('.channel-number');
+    channelIcon.style.display = 'flex';
+    channelNumberElement.textContent = channel;
+    
     // Generate sequence with the same seed as the mosaic view
     videoSequence = generateVideoSequence(generateSeed());
     calculateCumulativeTime();
@@ -601,6 +607,9 @@ function playFromGrid(videoId, channel) {
     
     // Play the current video for this channel
     playVideoForCurrentBlock();
+    
+    // Update the channel icon with new shape and texture
+    updateChannelIcon(channel);
     
     // Show notification
     const currentVideo = videoSequence[currentIndex];
@@ -981,4 +990,14 @@ function updateChannelIcon(channelNumber) {
                 }, 500);
             });
         });
+}
+
+function playVideo(videoId, channelNumber) {
+    if (player && player.loadVideoById) {
+        player.loadVideoById(videoId);
+        currentChannel = channelNumber;
+        updateChannelIcon(channelNumber);
+        showChannelNotification(channelNumber, getVideoTitle(videoId));
+        hideGrid();
+    }
 } 
