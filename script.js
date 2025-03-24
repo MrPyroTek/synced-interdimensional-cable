@@ -1,4 +1,4 @@
-const JSON_FILE_PATH = 'list1.json';  // Path to your JSON file
+const JSON_FILE_PATH = 'TvList.json';  // Path to your JSON file
 let player;
 let videoList = [];
 let videoSequence = [];
@@ -78,12 +78,23 @@ function generateVideoSequence(seed) {
     let totalDuration = 0;
     const targetDuration = 120 * 60; // 120 minutes in seconds
     
+    // Create a copy of the video list to track used videos
+    let availableVideos = [...videoList];
+    
     // Keep adding videos until we exceed the target duration
     while (totalDuration < targetDuration) {
+        // If we've used all videos, reset the available videos
+        if (availableVideos.length === 0) {
+            availableVideos = [...videoList];
+        }
+        
         const blockSeed = seed + '-' + sequence.length;
-        const randomIndex = Math.floor(seededRandom(blockSeed) * videoList.length);
-        const video = videoList[randomIndex];
+        const randomIndex = Math.floor(seededRandom(blockSeed) * availableVideos.length);
+        const video = availableVideos[randomIndex];
         const duration = parseDuration(video.duration);
+        
+        // Remove the used video from available videos
+        availableVideos.splice(randomIndex, 1);
         
         sequence.push(video);
         totalDuration += duration;
