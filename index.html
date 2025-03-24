@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' https: 'unsafe-inline' 'unsafe-eval' blob: data:">
+        content="default-src 'self' https: 'unsafe-inline' 'unsafe-eval' blob: data: https://raw.githubusercontent.com">
     <title>YouTube Playlist Player</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         * {
             margin: 0;
@@ -30,9 +31,9 @@
         .options-panel {
             display: none;
             position: fixed;
-            top: 0px;
-            left: 60px;
-            width: 50%;
+            top: 70px;
+            right: 20px;
+            width: 300px;
             background-color: rgba(0, 0, 0, 0.8);
             padding: 20px;
             border-radius: 8px;
@@ -51,6 +52,93 @@
             padding: 10px 20px;
             cursor: pointer;
             z-index: 1001;
+        }
+
+        .button-group {
+            position: fixed;
+            top: 10px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 1001;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            transition: opacity 0.3s ease;
+        }
+
+        .button-group.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .button-group .toggle-button {
+            position: static;
+            background-color: #000;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .button-group .toggle-button i {
+            font-size: 1.2em;
+        }
+
+        .button-group .toggle-button .tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 5px;
+        }
+
+        .button-group .toggle-button:hover .tooltip {
+            opacity: 1;
+        }
+
+        .button-group .toggle-button .tooltip::before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 5px solid rgba(0, 0, 0, 0.8);
+        }
+
+        .button-group .toggle-button:hover {
+            background-color: #333;
+        }
+
+        .option-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .option-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .option-item label {
+            cursor: pointer;
         }
 
         .controls {
@@ -289,6 +377,107 @@
                 gap: 10px;
             }
         }
+
+        .channel-icon {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 10000;
+            transition: clip-path 0.5s ease-in-out;
+            --before-bg: none;
+            --before-bg-color: transparent;
+            --after-bg: none;
+            --after-bg-color: transparent;
+            --before-opacity: 1;
+            --after-opacity: 0;
+        }
+
+        .channel-icon::before,
+        .channel-icon::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            background-size: cover;
+            background-position: center;
+            transition: opacity 0.5s ease-in-out;
+            will-change: opacity;
+        }
+
+        .channel-icon::before {
+            background-image: var(--before-bg);
+            background-color: var(--before-bg-color);
+            opacity: var(--before-opacity);
+        }
+
+        .channel-icon::after {
+            background-image: var(--after-bg);
+            background-color: var(--after-bg-color);
+            opacity: var(--after-opacity);
+        }
+
+        .channel-icon .tv-text {
+            font-size: 1.2em;
+            margin-bottom: 2px;
+            color: #e6f3ff;
+            text-shadow: 
+                -2px -2px 0 #000,
+                2px -2px 0 #000,
+                -2px 2px 0 #000,
+                2px 2px 0 #000;
+            position: relative;
+            z-index: 1;
+        }
+
+        .channel-icon .channel-number {
+            font-size: 1.5em;
+            color: #ffe6e6;
+            text-shadow: 
+                -2px -2px 0 #000,
+                2px -2px 0 #000,
+                -2px 2px 0 #000,
+                2px 2px 0 #000;
+            position: relative;
+            z-index: 1;
+        }
+
+        #gridView .channel-icon {
+            display: none;
+        }
+
+        #channelNotification {
+            display: none;
+            position: fixed;
+            top: 10px;
+            left: 140px;
+            width: 50%;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 9999;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #channelTitle {
+            margin-bottom: 5px;
+            font-size: 24px;
+        }
+
+        #channelVideoTitle {
+            color: #ccc;
+            font-size: 16px;
+        }
     </style>
 </head>
 
@@ -307,17 +496,36 @@
         <div class="thumbnail-grid" id="thumbnailGrid"></div>
         <div class="pagination" id="gridPagination"></div>
     </div>
-    <button class="toggle-button" style="right: 10px; top: 70px;" onclick="goToChannel0()">Mosaïque</button>
-    <button class="toggle-button" style="right: 10px; top: 110px;" onclick="syncCurrentVideo()">Sync</button>
+    <div class="channel-icon" id="channelIcon">
+        <div class="tv-text">TV</div>
+        <div class="channel-number">1</div>
+    </div>
+    <div class="button-group">
+        <button class="toggle-button" onclick="goToChannel0()">
+            <i class="fas fa-th-large"></i>
+            <span class="tooltip">Mosaïque</span>
+        </button>
+        <button class="toggle-button" onclick="syncCurrentVideo()">
+            <i class="fas fa-sync"></i>
+            <span class="tooltip">Sync</span>
+        </button>
+        <button class="toggle-button" onclick="togglePanel()">
+            <i class="fas fa-cog"></i>
+            <span class="tooltip">Options</span>
+        </button>
+        <button class="toggle-button" onclick="toggleFullscreen()">
+            <i class="fas fa-expand"></i>
+            <span class="tooltip">Fullscreen</span>
+        </button>
+    </div>
     <div class="options-panel" id="optionsPanel">
-        <div class="controls">
-            <select id="channelSelect" onchange="changeChannel()">
-                <option value="1">Channel 1</option>
-                <option value="2">Channel 2</option>
-                <option value="3">Channel 3</option>
-                <option value="4">Channel 4</option>
-                <option value="5">Channel 5</option>
-            </select>
+        <div class="option-item">
+            <input type="checkbox" id="autoHideButtons" onchange="toggleAutoHide(this.checked)">
+            <label for="autoHideButtons">Auto-hide Options</label>
+        </div>
+        <div class="option-item">
+            <input type="checkbox" id="autoHideIcon" onchange="toggleIconAutoHide(this.checked)">
+            <label for="autoHideIcon">Auto-hide Icon</label>
         </div>
         <div class="current-info" id="currentInfo">
             Loading video list...
@@ -325,11 +533,12 @@
     </div>
     <button class="channel-button left" onclick="changeChannelBy(-1)">◀</button>
     <button class="channel-button right" onclick="changeChannelBy(1)">▶</button>
-    <div id="channelNotification" style="display: none; position: fixed; top: 0px; left: 50px; width: 50%; background-color: rgba(0, 0, 0, 1); padding: 20px; border-radius: 8px; z-index: 1500; transition: opacity 0.3s ease-in-out; opacity: 1 !important;">
+    <div id="channelNotification" style="display: none; position: fixed; top: 20px; left: 90px; width: 50%; background-color: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 8px; z-index: 9999; transition: opacity 0.3s ease-in-out;">
         <h2 id="channelTitle" style="margin-bottom: 10px; font-size: 24px;">Channel 1</h2>
         <p id="channelVideoTitle" style="color: #ccc; font-size: 16px;">Video Title</p>
     </div>
 
+    <script src="adblock.js"></script>
     <script src="script.js"></script>
 </body>
 

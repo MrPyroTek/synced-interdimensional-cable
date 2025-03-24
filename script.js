@@ -12,6 +12,10 @@ let itemsPerPage = 24;
 let gridVideos = [];
 let notificationTimeout;
 let mosaicRefreshInterval;
+let autoHideTimeout;
+let isAutoHideEnabled = false;
+let iconAutoHideTimeout;
+let isIconAutoHideEnabled = false;
 
 // Load YouTube IFrame API
 const tag = document.createElement('script');
@@ -94,7 +98,8 @@ function generateSeed() {
     const franceTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
     const minutes = franceTime.getMinutes();
     const hours = franceTime.getHours();
-    const blockStart = Math.floor((hours * 60 + minutes) / 120) * 120; // Round down to nearest 120 minutes
+    const totalMinutes = hours * 60 + minutes;
+    const blockStart = Math.floor(totalMinutes / 120) * 120; // Round down to nearest 120 minutes
     const seed = `${franceTime.getFullYear()}-${franceTime.getMonth() + 1}-${franceTime.getDate()}-${blockStart}-ch${currentChannel}`;
     return seed;
 }
@@ -139,23 +144,17 @@ async function onPlayerReady(event) {
     // Load saved channel or default to 1
     const savedChannel = localStorage.getItem('selectedChannel');
     if (savedChannel) {
-        currentChannel = parseInt(savedChannel);  // Make sure it's a number
-        const select = document.getElementById('channelSelect');
-        
-        // Add the channel option if it doesn't exist
-        if (!select.querySelector(`option[value="${currentChannel}"]`)) {
-            const option = document.createElement('option');
-            option.value = currentChannel;
-            option.text = `Channel ${currentChannel}`;
-            select.add(option);
-        }
-        
-        select.value = currentChannel;
+        currentChannel = parseInt(savedChannel);
     }
+    
+    // Update the channel number in the icon
+    const channelNumberElement = document.querySelector('.channel-number');
+    channelNumberElement.textContent = currentChannel;
     
     await fetchVideoList();
     playVideoForCurrentBlock();
     showUnmutePrompt();
+    updateChannelIcon(currentChannel);
 }
 
 function onPlayerStateChange(event) {
@@ -274,81 +273,112 @@ function changeChannel() {
 // Update the togglePanel function
 function togglePanel() {
     const panel = document.getElementById('optionsPanel');
-    if (panel.style.display === 'none') {
+    if (panel.style.display === 'block') {
+        panel.style.display = 'none';
+    } else {
         panel.style.display = 'block';
-        panel.style.opacity = '1';
-    } else {
-        panel.style.opacity = '0';
-        setTimeout(() => {
-            panel.style.display = 'none';
-        }, 300); // Wait for fade out animation
     }
 }
 
-// Modify the changeChannelBy function
-function changeChannelBy(delta) {
-    const select = document.getElementById('channelSelect');
-    const currentValue = parseInt(select.value);
-    let newValue;
-    
-    if (delta > 0) {
-        newValue = currentValue + 1;
-        if (newValue > 999) newValue = 0; // Changed to include 0
-    } else {
-        newValue = currentValue - 1;
-        if (newValue < 0) newValue = 999;
-    }
-    
-    currentChannel = newValue;
-    
-    if (!select.querySelector(`option[value="${newValue}"]`)) {
-        const option = document.createElement('option');
-        option.value = newValue;
-        option.text = `Channel ${newValue}`;
-        select.add(option);
-    }
-    select.value = newValue;
-    
-    localStorage.setItem('selectedChannel', currentChannel);
-    
-    lastGeneratedSeed = '';
-    playVideoForCurrentBlock();
-    updateCurrentInfo();
-    
-    const currentVideo = videoSequence[currentIndex];
-    showChannelNotification(currentChannel, currentVideo.title);
-}
-
-function showChannelNotification(channelNumber, videoTitle) {
+// Add shared function for synchronized appearance
+function showChannelElements(channelNumber, videoTitle) {
+    const channelIcon = document.getElementById('channelIcon');
     const notification = document.getElementById('channelNotification');
     const titleElement = document.getElementById('channelTitle');
     const videoTitleElement = document.getElementById('channelVideoTitle');
+    const channelNumberElement = channelIcon.querySelector('.channel-number');
     
-    // Clear any existing timeouts
-    if (notificationTimeout) {
-        clearTimeout(notificationTimeout);
-    }
+    // Hide both elements immediately
+    channelIcon.style.opacity = '0';
+    notification.style.opacity = '0';
+    notification.style.display = 'block';
     
     // Update content
     titleElement.textContent = `Channel ${channelNumber}`;
     videoTitleElement.textContent = videoTitle;
+    channelNumberElement.textContent = channelNumber;
     
-    // Force full opacity before showing
-    notification.style.opacity = '1';
-    notification.style.display = 'block';
-    
-    // Keep full opacity for 1 second, then start fade out
-    notificationTimeout = setTimeout(() => {
+    // Show both elements after 200ms
+    setTimeout(() => {
+        channelIcon.style.transition = 'opacity 0.15s ease-in-out';
+        notification.style.transition = 'opacity 0.15s ease-in-out';
+        channelIcon.style.opacity = '1';
         notification.style.opacity = '1';
         
-        // Start fade out after 1 more second
-        setTimeout(() => {
+        // Handle notification fade out after 2 seconds
+        notificationTimeout = setTimeout(() => {
+            notification.style.transition = 'opacity 0.3s ease-in-out';
             notification.style.opacity = '0';
             setTimeout(() => {
                 notification.style.display = 'none';
             }, 300);
-        }, 1000);
-    }, 1000);
+        }, 2000);
+    }, 200);
+}
+
+// Modify changeChannelBy to use the shared function
+function changeChannelBy(delta) {
+    // Check if we're in mosaic mode
+    if (document.getElementById('gridView').style.display === 'block') {
+        // In mosaic mode, change pages instead of channels
+        changePage(delta);
+        return;
+    }
+
+    // Channel changing logic
+    let newValue;
+    if (delta > 0) {
+        newValue = currentChannel + 1;
+        if (newValue > 999) newValue = 0;
+    } else {
+        newValue = currentChannel - 1;
+        if (newValue < 0) newValue = 999;
+    }
+    
+    currentChannel = newValue;
+    localStorage.setItem('selectedChannel', newValue);
+    
+    // Update channel and show elements
+    lastGeneratedSeed = '';
+    playVideoForCurrentBlock();
+    updateCurrentInfo();
+    
+    // Show both elements with synchronized timing
+    const currentVideo = videoSequence[currentIndex];
+    showChannelElements(newValue, currentVideo.title);
+    
+    // Update the channel icon with new shape and texture
+    updateChannelIcon(newValue);
+}
+
+function showChannelNotification(channelNumber, videoTitle) {
+    const channelNotification = document.getElementById('channelNotification');
+    const channelTitle = document.getElementById('channelTitle');
+    const channelVideoTitle = document.getElementById('channelVideoTitle');
+    
+    // Clear any existing timeouts
+    if (channelNotification.fadeTimeout) {
+        clearTimeout(channelNotification.fadeTimeout);
+    }
+    if (channelNotification.hideTimeout) {
+        clearTimeout(channelNotification.hideTimeout);
+    }
+    
+    // Reset opacity and display
+    channelNotification.style.opacity = '1';
+    channelNotification.style.display = 'block';
+    
+    // Update the content
+    channelTitle.textContent = `Channel ${channelNumber}`;
+    channelVideoTitle.textContent = videoTitle;
+    
+    // Set a new timeout for hiding
+    channelNotification.fadeTimeout = setTimeout(() => {
+        channelNotification.style.opacity = '0';
+        channelNotification.hideTimeout = setTimeout(() => {
+            channelNotification.style.display = 'none';
+        }, 300);
+    }, 5000);
 }
 
 function closeMosaic() {
@@ -368,6 +398,7 @@ function goToChannel0() {
     // If mosaic is already visible, close it
     if (gridView.style.display === 'block') {
         closeMosaic();
+        document.getElementById('channelIcon').style.display = 'none';
         return;
     }
     
@@ -382,51 +413,27 @@ function startMosaicRefresh() {
         clearInterval(mosaicRefreshInterval);
     }
     
-    // Set new interval
+    // Set new interval to update every 2 seconds
     mosaicRefreshInterval = setInterval(() => {
         if (document.getElementById('gridView').style.display === 'block') {  // Only refresh if mosaic is visible
             updateMosaicContent();
         }
-    }, 5000); // 5 seconds
+    }, 2000); // 2 seconds
 }
 
-// Add new function to update mosaic content
-async function updateMosaicContent() {
+// Add a helper function to calculate current time in block
+function getCurrentTimeInBlock() {
     const now = new Date();
-    const currentMinute = now.getMinutes();
-    const blockStart = Math.floor(currentMinute / 10) * 10;
-    const totalSeconds = (currentMinute - blockStart) * 60 + now.getSeconds();
-
-    // Update current videos for all channels
-    for (let i = 0; i < gridVideos.length; i++) {
-        const channel = i + 1;
-        const channelSeed = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${blockStart}-ch${channel}`;
-        const sequence = generateVideoSequence(channelSeed);
-        
-        // Calculate which video should be playing now
-        let currentVideoIndex = 0;
-        let cumulativeSeconds = 0;
-        
-        for (let j = 0; j < sequence.length; j++) {
-            cumulativeSeconds += parseDuration(sequence[j].duration);
-            if (totalSeconds < cumulativeSeconds) {
-                currentVideoIndex = j;
-                break;
-            }
-        }
-
-        // Update the video in gridVideos
-        gridVideos[i] = {
-            ...sequence[currentVideoIndex],
-            channel: channel
-        };
-    }
-    
-    // Refresh current page without changing page number
-    displayCurrentPage();
+    const franceTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
+    const minutes = franceTime.getMinutes();
+    const hours = franceTime.getHours();
+    const totalMinutes = hours * 60 + minutes;
+    const minutesIntoBlock = totalMinutes % 120;
+    const totalSeconds = minutesIntoBlock * 60 + franceTime.getSeconds();
+    return totalSeconds;
 }
 
-// Modify loadGridView to use the new refresh system
+// Modify loadGridView to use the new time calculation
 async function loadGridView() {
     const playerView = document.getElementById('player');
     const gridView = document.getElementById('gridView');
@@ -438,14 +445,11 @@ async function loadGridView() {
     
     // Initialize gridVideos array
     gridVideos = [];
-    const now = new Date();
-    const currentMinute = now.getMinutes();
-    const blockStart = Math.floor(currentMinute / 10) * 10;
-    const totalSeconds = (currentMinute - blockStart) * 60 + now.getSeconds();
+    const totalSeconds = getCurrentTimeInBlock();
 
     // Generate sequences for channels 1-999
     for (let channel = 1; channel <= 999; channel++) {
-        const channelSeed = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${blockStart}-ch${channel}`;
+        const channelSeed = generateSeed().replace(`ch${currentChannel}`, `ch${channel}`);
         const sequence = generateVideoSequence(channelSeed);
         
         // Calculate which video should be playing now
@@ -483,7 +487,9 @@ function displayCurrentPage() {
     const end = start + itemsPerPage;
     const pageVideos = gridVideos.slice(start, end);
     
-    grid.innerHTML = pageVideos.map(video => `
+    // Create or update grid items
+    const existingItems = grid.children;
+    const newItems = pageVideos.map(video => `
         <div class="thumbnail-item" onclick="playFromGrid('${video.id}', ${video.channel})">
             <img src="https://img.youtube.com/vi/${video.id}/mqdefault.jpg" alt="${video.title}">
             <div class="thumbnail-info">
@@ -492,6 +498,11 @@ function displayCurrentPage() {
             </div>
         </div>
     `).join('');
+    
+    // Only update if the content has changed
+    if (grid.innerHTML !== newItems) {
+        grid.innerHTML = newItems;
+    }
     
     updatePagination();
 }
@@ -551,6 +562,7 @@ function goToPage(page) {
     displayCurrentPage();
 }
 
+// Modify playFromGrid to remove channel select related code
 function playFromGrid(videoId, channel) {
     // Stop the refresh interval
     if (mosaicRefreshInterval) {
@@ -559,18 +571,6 @@ function playFromGrid(videoId, channel) {
     
     // Update channel
     currentChannel = channel;
-    const select = document.getElementById('channelSelect');
-    
-    // Add channel option if it doesn't exist
-    if (!select.querySelector(`option[value="${channel}"]`)) {
-        const option = document.createElement('option');
-        option.value = channel;
-        option.text = `Channel ${channel}`;
-        select.add(option);
-    }
-    
-    // Update select and localStorage
-    select.value = channel;
     localStorage.setItem('selectedChannel', channel);
     
     // Switch back to player view
@@ -579,10 +579,25 @@ function playFromGrid(videoId, channel) {
     playerView.style.display = 'block';
     gridView.style.display = 'none';
     
-    // Force new sequence generation for the selected channel
-    lastGeneratedSeed = '';
+    // Generate sequence with the same seed as the mosaic view
     videoSequence = generateVideoSequence(generateSeed());
     calculateCumulativeTime();
+    
+    // Calculate which video should be playing now
+    const totalSeconds = getCurrentTimeInBlock();
+    let currentVideoIndex = 0;
+    let cumulativeSeconds = 0;
+    
+    for (let i = 0; i < videoSequence.length; i++) {
+        cumulativeSeconds += parseDuration(videoSequence[i].duration);
+        if (totalSeconds < cumulativeSeconds) {
+            currentVideoIndex = i;
+            break;
+        }
+    }
+    
+    // Update current index to match the calculated video
+    currentIndex = currentVideoIndex;
     
     // Play the current video for this channel
     playVideoForCurrentBlock();
@@ -638,6 +653,12 @@ window.addEventListener('beforeunload', () => {
     if (mosaicRefreshInterval) {
         clearInterval(mosaicRefreshInterval);
     }
+    if (autoHideTimeout) {
+        clearTimeout(autoHideTimeout);
+    }
+    if (iconAutoHideTimeout) {
+        clearTimeout(iconAutoHideTimeout);
+    }
 });
 
 // Add new sync function
@@ -655,4 +676,309 @@ function syncCurrentVideo() {
     if (currentVideo) {
         showChannelNotification(currentChannel, currentVideo.title);
     }
+}
+
+// Add new function to update mosaic content
+async function updateMosaicContent() {
+    const totalSeconds = getCurrentTimeInBlock();
+    const grid = document.getElementById('thumbnailGrid');
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageVideos = gridVideos.slice(start, end);
+
+    // Update current videos for visible channels only
+    for (let i = start; i < end; i++) {
+        const channel = i + 1;
+        const channelSeed = generateSeed().replace(`ch${currentChannel}`, `ch${channel}`);
+        const sequence = generateVideoSequence(channelSeed);
+        
+        // Calculate which video should be playing now
+        let currentVideoIndex = 0;
+        let cumulativeSeconds = 0;
+        
+        for (let j = 0; j < sequence.length; j++) {
+            cumulativeSeconds += parseDuration(sequence[j].duration);
+            if (totalSeconds < cumulativeSeconds) {
+                currentVideoIndex = j;
+                break;
+            }
+        }
+
+        // Update the video in gridVideos
+        gridVideos[i] = {
+            ...sequence[currentVideoIndex],
+            channel: channel
+        };
+
+        // Update only the visible thumbnail
+        const thumbnailItem = grid.children[i - start];
+        if (thumbnailItem) {
+            const img = thumbnailItem.querySelector('img');
+            const titleDiv = thumbnailItem.querySelector('.thumbnail-info div:last-child');
+            const channelDiv = thumbnailItem.querySelector('.thumbnail-info div:first-child');
+            
+            // Only update if the content has changed
+            if (img.src !== `https://img.youtube.com/vi/${sequence[currentVideoIndex].id}/mqdefault.jpg`) {
+                img.src = `https://img.youtube.com/vi/${sequence[currentVideoIndex].id}/mqdefault.jpg`;
+            }
+            if (titleDiv.textContent !== sequence[currentVideoIndex].title) {
+                titleDiv.textContent = sequence[currentVideoIndex].title;
+            }
+            if (channelDiv.textContent !== `Channel ${channel}`) {
+                channelDiv.textContent = `Channel ${channel}`;
+            }
+        }
+    }
+}
+
+// Add function to handle auto-hide toggle
+function toggleAutoHide(enabled) {
+    isAutoHideEnabled = enabled;
+    if (enabled) {
+        startAutoHideTimer();
+    } else {
+        clearAutoHideTimer();
+        showButtonGroup();
+    }
+}
+
+// Add function to start auto-hide timer
+function startAutoHideTimer() {
+    clearAutoHideTimer();
+    autoHideTimeout = setTimeout(() => {
+        if (isAutoHideEnabled) {
+            hideButtonGroup();
+        }
+    }, 3000);
+}
+
+// Add function to clear auto-hide timer
+function clearAutoHideTimer() {
+    if (autoHideTimeout) {
+        clearTimeout(autoHideTimeout);
+        autoHideTimeout = null;
+    }
+}
+
+// Add function to hide button group
+function hideButtonGroup() {
+    const buttonGroup = document.querySelector('.button-group');
+    buttonGroup.classList.add('hidden');
+}
+
+// Add function to show button group
+function showButtonGroup() {
+    const buttonGroup = document.querySelector('.button-group');
+    buttonGroup.classList.remove('hidden');
+}
+
+// Modify the mouse movement handler to handle both button group and icon
+document.addEventListener('mousemove', () => {
+    if (isAutoHideEnabled) {
+        showButtonGroup();
+        startAutoHideTimer();
+    }
+    if (isIconAutoHideEnabled) {
+        showChannelIcon();
+        startIconAutoHideTimer();
+    }
+});
+
+// Add function to show channel icon
+function showChannelIcon() {
+    const channelIcon = document.getElementById('channelIcon');
+    channelIcon.style.display = 'flex';
+    channelIcon.style.transition = 'opacity 0.15s ease-in-out';
+    // Force a reflow to ensure the transition works
+    channelIcon.offsetHeight;
+    channelIcon.style.opacity = '1';
+}
+
+// Add function to hide channel icon
+function hideChannelIcon() {
+    const channelIcon = document.getElementById('channelIcon');
+    channelIcon.style.transition = 'opacity 0.15s ease-in-out';
+    channelIcon.style.opacity = '0';
+}
+
+// Add function to handle icon auto-hide toggle
+function toggleIconAutoHide(enabled) {
+    isIconAutoHideEnabled = enabled;
+    if (enabled) {
+        startIconAutoHideTimer();
+    } else {
+        clearIconAutoHideTimer();
+        showChannelIcon();
+    }
+}
+
+// Add function to start icon auto-hide timer
+function startIconAutoHideTimer() {
+    clearIconAutoHideTimer();
+    iconAutoHideTimeout = setTimeout(() => {
+        if (isIconAutoHideEnabled) {
+            hideChannelIcon();
+        }
+    }, 3000);
+}
+
+// Add function to clear icon auto-hide timer
+function clearIconAutoHideTimer() {
+    if (iconAutoHideTimeout) {
+        clearTimeout(iconAutoHideTimeout);
+        iconAutoHideTimeout = null;
+    }
+}
+
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+            console.log(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+}
+
+// Add keyboard event listeners for arrow keys
+document.addEventListener('keydown', (event) => {
+    // Only handle arrow keys if we're not in mosaic view
+    if (document.getElementById('gridView').style.display !== 'block') {
+        if (event.key === 'ArrowLeft') {
+            changeChannelBy(-1);
+        } else if (event.key === 'ArrowRight') {
+            changeChannelBy(1);
+        }
+    }
+});
+
+function updateChannelIcon(channelNumber) {
+    const channelIcon = document.getElementById('channelIcon');
+    
+    // Make sure the icon is visible and has the correct display properties
+    channelIcon.style.display = 'flex';
+    channelIcon.style.opacity = '1';
+    
+    // Set base dimensions
+    channelIcon.style.width = '100px';
+    channelIcon.style.height = '100px';
+    
+    // Temporarily remove all transitions to force a reset
+    channelIcon.style.transition = 'none';
+    channelIcon.style.setProperty('--before-opacity', '1');
+    channelIcon.style.setProperty('--after-opacity', '0');
+    
+    // Generate 4 random points for the polygon
+    const maxOffset = 25;
+    
+    // Generate random offsets for each corner
+    const topLeft = {
+        x: Math.floor(Math.random() * maxOffset),
+        y: Math.floor(Math.random() * maxOffset)
+    };
+    const topRight = {
+        x: 100 - Math.floor(Math.random() * maxOffset),
+        y: Math.floor(Math.random() * maxOffset)
+    };
+    const bottomRight = {
+        x: 100 - Math.floor(Math.random() * maxOffset),
+        y: 100 - Math.floor(Math.random() * maxOffset)
+    };
+    const bottomLeft = {
+        x: Math.floor(Math.random() * maxOffset),
+        y: 100 - Math.floor(Math.random() * maxOffset)
+    };
+    
+    // Force a reflow to ensure the transition works
+    channelIcon.offsetHeight;
+    
+    // Re-add the transition properties
+    channelIcon.style.transition = 'clip-path 0.5s ease-in-out';
+    
+    // Create the clip-path polygon with CSS custom properties for animation
+    channelIcon.style.setProperty('--top-left-x', `${topLeft.x}px`);
+    channelIcon.style.setProperty('--top-left-y', `${topLeft.y}px`);
+    channelIcon.style.setProperty('--top-right-x', `${topRight.x}px`);
+    channelIcon.style.setProperty('--top-right-y', `${topRight.y}px`);
+    channelIcon.style.setProperty('--bottom-right-x', `${bottomRight.x}px`);
+    channelIcon.style.setProperty('--bottom-right-y', `${bottomRight.y}px`);
+    channelIcon.style.setProperty('--bottom-left-x', `${bottomLeft.x}px`);
+    channelIcon.style.setProperty('--bottom-left-y', `${bottomLeft.y}px`);
+    
+    // Apply the clip-path with CSS custom properties
+    channelIcon.style.clipPath = `polygon(
+        var(--top-left-x) var(--top-left-y),
+        var(--top-right-x) var(--top-right-y),
+        var(--bottom-right-x) var(--bottom-right-y),
+        var(--bottom-left-x) var(--bottom-left-y)
+    )`;
+    
+    // Try to fetch a random texture from TextureTown API
+    fetch("https://textures.neocities.org/manifest.json")
+        .then((res) => res.json())
+        .then((json) => {
+            // Get a random category
+            const randomCategoryIndex = Math.floor(Math.random() * json.catalogue.length);
+            const category = json.catalogue[randomCategoryIndex];
+            
+            // Get a random file from that category
+            const randomFileIndex = Math.floor(Math.random() * category.files.length);
+            const randomFile = category.files[randomFileIndex];
+            
+            // Create the full texture URL
+            const textureURL = `${json.info.base_url}/${json.info.textures_folder}/${category.name}/${randomFile}`;
+            
+            // Create a new image to preload the texture
+            const img = new Image();
+            img.onload = () => {
+                // Force a reflow to ensure the transition works
+                channelIcon.offsetHeight;
+                
+                // Apply the new texture to the ::after pseudo-element
+                channelIcon.style.setProperty('--after-bg', `url(${textureURL})`);
+                channelIcon.style.setProperty('--after-bg-color', 'transparent');
+                
+                // Start both transitions at the same time
+                requestAnimationFrame(() => {
+                    channelIcon.style.setProperty('--after-opacity', '1');
+                    channelIcon.style.setProperty('--before-opacity', '0');
+                    
+                    // After the transition, update the ::before element
+                    setTimeout(() => {
+                        channelIcon.style.setProperty('--before-bg', `url(${textureURL})`);
+                        channelIcon.style.setProperty('--before-bg-color', 'transparent');
+                        channelIcon.style.setProperty('--before-opacity', '1');
+                        channelIcon.style.setProperty('--after-opacity', '0');
+                    }, 500);
+                });
+            };
+            img.src = textureURL;
+        })
+        .catch(() => {
+            // Force a reflow to ensure the transition works
+            channelIcon.offsetHeight;
+            
+            // Fallback to random color if API call fails
+            const hue = Math.random() * 360;
+            const saturation = Math.floor(Math.random() * 30) + 70;
+            const lightness = Math.floor(Math.random() * 20) + 40;
+            
+            // Apply the new color to the ::after pseudo-element
+            channelIcon.style.setProperty('--after-bg', 'none');
+            channelIcon.style.setProperty('--after-bg-color', `hsl(${hue}, ${saturation}%, ${lightness}%)`);
+            
+            // Start both transitions at the same time
+            requestAnimationFrame(() => {
+                channelIcon.style.setProperty('--after-opacity', '1');
+                channelIcon.style.setProperty('--before-opacity', '0');
+                
+                // After the transition, update the ::before element
+                setTimeout(() => {
+                    channelIcon.style.setProperty('--before-bg', 'none');
+                    channelIcon.style.setProperty('--before-bg-color', `hsl(${hue}, ${saturation}%, ${lightness}%)`);
+                    channelIcon.style.setProperty('--before-opacity', '1');
+                    channelIcon.style.setProperty('--after-opacity', '0');
+                }, 500);
+            });
+        });
 } 
