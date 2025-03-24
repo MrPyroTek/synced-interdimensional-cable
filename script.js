@@ -260,6 +260,13 @@ function showUnmutePrompt() {
         player.playVideo();
         overlay.style.display = 'none';
         overlay.removeEventListener('click', handleUnmute);
+        
+        // Check if we're on a mobile device and not already in fullscreen
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.log(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+        }
     };
     
     overlay.addEventListener('click', handleUnmute);
