@@ -18,6 +18,30 @@
             box-sizing: border-box;
         }
 
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #player {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
         @media screen and (orientation: portrait) {
             html {
                 transform: rotate(-90deg);
@@ -29,19 +53,6 @@
                 top: 100%;
                 left: 0;
             }
-        }
-
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #000;
-            color: #fff;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        #player {
-            width: 100%;
-            height: 100vh;
         }
 
         .options-panel {
