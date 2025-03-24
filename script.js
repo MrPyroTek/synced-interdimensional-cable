@@ -895,25 +895,35 @@ function updateChannelIcon(channelNumber) {
     channelIcon.style.setProperty('--before-opacity', '1');
     channelIcon.style.setProperty('--after-opacity', '0');
     
-    // Generate 4 random points for the polygon
-    const maxOffset = 25;
+    // Generate seed based on current date and channel (without time)
+    const now = new Date();
+    const franceTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
+    const logoSeed = `${franceTime.getFullYear()}-${franceTime.getMonth() + 1}-${franceTime.getDate()}-ch${channelNumber}`;
     
-    // Generate random offsets for each corner
+    // Generate 4 random points for the polygon using seeded random
+    const maxOffset = 25; // Keep the same max offset
+    
+    // Function to get seeded random number between min and max
+    const getSeededRandom = (seed, index) => {
+        return Math.floor(seededRandom(`${seed}-${index}`) * maxOffset);
+    };
+    
+    // Generate random offsets for each corner using seeded random
     const topLeft = {
-        x: Math.floor(Math.random() * maxOffset),
-        y: Math.floor(Math.random() * maxOffset)
+        x: getSeededRandom(logoSeed, 'topLeft-x'),
+        y: getSeededRandom(logoSeed, 'topLeft-y')
     };
     const topRight = {
-        x: 100 - Math.floor(Math.random() * maxOffset),
-        y: Math.floor(Math.random() * maxOffset)
+        x: 100 - getSeededRandom(logoSeed, 'topRight-x'),
+        y: getSeededRandom(logoSeed, 'topRight-y')
     };
     const bottomRight = {
-        x: 100 - Math.floor(Math.random() * maxOffset),
-        y: 100 - Math.floor(Math.random() * maxOffset)
+        x: 100 - getSeededRandom(logoSeed, 'bottomRight-x'),
+        y: 100 - getSeededRandom(logoSeed, 'bottomRight-y')
     };
     const bottomLeft = {
-        x: Math.floor(Math.random() * maxOffset),
-        y: 100 - Math.floor(Math.random() * maxOffset)
+        x: getSeededRandom(logoSeed, 'bottomLeft-x'),
+        y: 100 - getSeededRandom(logoSeed, 'bottomLeft-y')
     };
     
     // Force a reflow to ensure the transition works
@@ -944,12 +954,12 @@ function updateChannelIcon(channelNumber) {
     fetch("https://textures.neocities.org/manifest.json")
         .then((res) => res.json())
         .then((json) => {
-            // Get a random category
-            const randomCategoryIndex = Math.floor(Math.random() * json.catalogue.length);
+            // Use seeded random to select category and file
+            const randomCategoryIndex = Math.floor(seededRandom(`${logoSeed}-category`) * json.catalogue.length);
             const category = json.catalogue[randomCategoryIndex];
             
-            // Get a random file from that category
-            const randomFileIndex = Math.floor(Math.random() * category.files.length);
+            // Get a random file from that category using the same seed
+            const randomFileIndex = Math.floor(seededRandom(`${logoSeed}-file`) * category.files.length);
             const randomFile = category.files[randomFileIndex];
             
             // Create the full texture URL
@@ -985,10 +995,10 @@ function updateChannelIcon(channelNumber) {
             // Force a reflow to ensure the transition works
             channelIcon.offsetHeight;
             
-            // Fallback to random color if API call fails
-            const hue = Math.random() * 360;
-            const saturation = Math.floor(Math.random() * 30) + 70;
-            const lightness = Math.floor(Math.random() * 20) + 40;
+            // Use seeded random for fallback color
+            const hue = seededRandom(`${logoSeed}-hue`) * 360;
+            const saturation = Math.floor(seededRandom(`${logoSeed}-saturation`) * 30) + 70;
+            const lightness = Math.floor(seededRandom(`${logoSeed}-lightness`) * 20) + 40;
             
             // Apply the new color to the ::after pseudo-element
             channelIcon.style.setProperty('--after-bg', 'none');
